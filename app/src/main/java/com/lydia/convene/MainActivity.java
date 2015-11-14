@@ -3,7 +3,6 @@ package com.lydia.convene;
 import android.app.Activity;
 import android.content.Intent;
 import android.os.Bundle;
-import android.os.Handler;
 import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -17,54 +16,54 @@ import com.facebook.FacebookSdk;
 import com.facebook.login.LoginResult;
 import com.facebook.login.widget.LoginButton;
 
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.net.InetAddress;
-import java.net.NetworkInterface;
-import java.net.ServerSocket;
-import java.net.Socket;
-import java.net.SocketException;
-import java.util.Enumeration;
+import org.json.JSONException;
+import org.json.JSONObject;
+
+import java.io.UnsupportedEncodingException;
+import java.net.URI;
+import java.net.URLEncoder;
 
 
 public class MainActivity extends Activity {
-    //will hold our location from other user
-    private String lineIn = null;
+
+    // LogCat tag - http://developer.android.com/tools/debugging/debugging-log.html
+    private static final String TAG = MainActivity.class.getSimpleName();
+    // Client name
+    private String name = null;
 
     private TextView info;
     private LoginButton loginButton;
-    private Button locationButton;
+    private Button btnSend;
+
+    private WebSocketClient client;
     // The CallbackManager is used to manage the callbacks used in the app.
     private CallbackManager callbackManager;
+    private Utils utils;
 
-    // DEFAULT IP
-    public static String SERVERIP = "10.0.2.15";
+    // JSON flags to identify the kind of JSON response
+    private static final String TAG_SELF = "self", TAG_CONVENE_REQ = "convene?", TAG_LOCATION_REQ = "location",
+            TAG_LOCATION_RESPONSE = "locationResponse", TAG_CONVENE_RESPONSE = "conveneResponse";
 
-    // DESIGNATE A PORT
-    public static final int SERVERPORT = 8080;
-
-    private Handler handler = new Handler();
-
-    private ServerSocket serverSocket;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-
+        Log.d("test", "test");
         FacebookSdk.sdkInitialize(getApplicationContext());
         // Initialize the SDK before executing any other operations,
         // especially, if you're using Facebook UI elements.
+        setContentView(com.lydia.convene.R.layout.activity_main);
 
         //initialize our instance of CallbackManager
         callbackManager = CallbackManager.Factory.create();
 
-        setContentView(com.lydia.convene.R.layout.activity_main);
         //use findViewById to initialize the widgets
         info = (TextView) findViewById(com.lydia.convene.R.id.info);
         loginButton = (LoginButton) findViewById(com.lydia.convene.R.id.login_button);
-        locationButton = (Button) findViewById(R.id.send_Location);
+        btnSend = (Button) findViewById(R.id.btnSend);
 
+        utils = new Utils(getApplicationContext());
+        Log.d("INIT", "inti");
         //create a callback to handle the results of the login attempts and
         // register it with the CallbackManager
         loginButton.registerCallback(callbackManager, new FacebookCallback<LoginResult>() {
@@ -86,10 +85,63 @@ public class MainActivity extends Activity {
             }
         });
 
-        SERVERIP = getLocalIpAddress();
-        Thread fst = new Thread(new ServerThread());
-        fst.start();
+        /**
+         * Creating web socket client. This will have callback methods
+         * */
+        Log.d("BEGIN CONN", "creating client websocket connection");
+        try {
+            client = new WebSocketClient(URI.create(WsConfig.URL_WEBSOCKET
+                    + URLEncoder.encode(name, "UTF-8")), new WebSocketClient.Listener() {
+
+                @Override
+            public void onConnect() {
+
+            }
+
+            /**
+             * On receiving the message from web socket server
+             * */
+            @Override
+            public void onMessage(String message) {
+                Log.d(TAG, String.format("Got string message! %s", message));
+
+                parseMessage(message);
+            }
+
+            @Override
+            public void onMessage(byte[] data) {
+                Log.d(TAG, String.format("Got binary message! %s",
+                        bytesToHex(data)));
+
+                // Message will be in JSON format
+                parseMessage(bytesToHex(data));
+            }
+
+            /**
+             * Called when the connection is terminated
+             * */
+            @Override
+            public void onDisconnect(int code, String reason) {
+                // clear the session id from shared preferences
+                utils.storeSessionId(null);
+            }
+
+            @Override
+            public void onError(Exception error) {
+                Log.e(TAG, "Error! : " + error);
+            }
+
+            }, null);
+            Log.d("BEGIN..", "made a client");
+        }
+
+        catch (UnsupportedEncodingException e) {
+            e.printStackTrace();
+        }
+
+        client.connect();
     }
+
 
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
@@ -124,103 +176,94 @@ public class MainActivity extends Activity {
     }
 
 
-    public void SendLocation(){
-        // create client socket and send message to serversocket waiting on other app
-
-
+    public void sendConveneReq() {
+        // ask userX to meet. Send to server to pass on
+        // Sending message to web socket server
+        sendMessageToServer(utils.getSendMessageJSON("convene?"));
     }
-
-    // GETS THE IP ADDRESS OF YOUR PHONE'S NETWORK
-    private String getLocalIpAddress() {
-        try {
-            for (Enumeration<NetworkInterface> en = NetworkInterface.getNetworkInterfaces(); en.hasMoreElements();) {
-                NetworkInterface intf = en.nextElement();
-                for (Enumeration<InetAddress> enumIpAddr = intf.getInetAddresses(); enumIpAddr.hasMoreElements();) {
-                    InetAddress inetAddress = enumIpAddr.nextElement();
-                    if (!inetAddress.isLoopbackAddress()) { return inetAddress.getHostAddress().toString(); }
-                }
-            }
-        } catch (SocketException ex) {
-            Log.e("ServerActivity", ex.toString());
-        }
-        return null;
-    }
-
 
     @Override
-    protected void onStop() {
+    protected void onDestroy() {
         super.onStop();
+        // MAKE SURE YOU CLOSE THE SOCKET UPON EXITING
+        if(client != null & client.isConnected()){
+            client.disconnect();
+        }
+    }
+
+    private void sendMessageToServer(String message) {
+        if (client != null && client.isConnected()) {
+            client.send(message);
+        }
+    }
+
+    final protected static char[] hexArray = "0123456789ABCDEF".toCharArray();
+
+    public static String bytesToHex(byte[] bytes) {
+        char[] hexChars = new char[bytes.length * 2];
+        for (int j = 0; j < bytes.length; j++) {
+            int v = bytes[j] & 0xFF;
+            hexChars[j * 2] = hexArray[v >>> 4];
+            hexChars[j * 2 + 1] = hexArray[v & 0x0F];
+        }
+        return new String(hexChars);
+    }
+
+    /**
+     * Parsing the JSON message received from server The intent of message will
+     * be identified by JSON node 'flag'. flag = self, message belongs to the
+     * person. flag = new, a new person joined the conversation. flag = message,
+     * a new message received from server. flag = exit, somebody left the
+     * conversation.
+     */
+    private void parseMessage(final String msg) {
+
         try {
-            // MAKE SURE YOU CLOSE THE SOCKET UPON EXITING
-            serverSocket.close();
-        } catch (IOException e) {
+            JSONObject jObj = new JSONObject(msg);
+
+            // JSON node 'flag'
+            String flag = jObj.getString("flag");
+
+            // if flag is 'self', this JSON contains session id
+            if (flag.equalsIgnoreCase(TAG_SELF)) {
+
+                String sessionId = jObj.getString("sessionId");
+
+                // Save the session id in shared preferences
+                utils.storeSessionId(sessionId);
+
+                Log.e(TAG, "Your session id: " + utils.getSessionId());
+
+            } else if (flag.equalsIgnoreCase(TAG_CONVENE_REQ)) {
+                // If the flag is 'conven_req' then we received a request to meet
+                // a friend
+                String name = jObj.getString("name");
+
+                // alert dialog to give option to meet or not meet friend
+                //or notification if paused, in background
+            } else if (flag.equalsIgnoreCase(TAG_LOCATION_REQ)) {
+                // if the flag is 'location request', friend suggested meeting point
+                String fromName = name;
+                String message = jObj.getString("message");
+                String sessionId = jObj.getString("sessionId");
+                String location = jObj.getString("location");
+                //alert that shows friend asked to meet.
+                //or notification if paused, in background
+            } else if (flag.equalsIgnoreCase(TAG_CONVENE_RESPONSE)) {
+                // If the flag is 'exit', somebody left the conversation
+                String name = jObj.getString("name");
+                String message = jObj.getString("response");
+                //alert that friend responded
+                //or notification if paused, in background
+            } else if (flag.equalsIgnoreCase(TAG_LOCATION_RESPONSE)) {
+                // If the flag is 'exit', somebody left the conversation
+                String name = jObj.getString("name");
+                String message = jObj.getString("response");
+                //alert that friend responded
+                //or notification if paused, in background
+            }
+        } catch (JSONException e) {
             e.printStackTrace();
         }
     }
-
-
-    public class ServerThread implements Runnable {
-        public void run() {
-            try {
-                if (SERVERIP != null) {
-                    handler.post(new Runnable() {
-                        @Override
-                        public void run() {
-                            info.setText("Listening on IP: " + SERVERIP);
-                        }
-                    });
-                    serverSocket = new ServerSocket(SERVERPORT);
-                    while (true) {
-                        // LISTEN FOR INCOMING CLIENTS
-                        Socket client = serverSocket.accept();
-                        handler.post(new Runnable() {
-                            @Override
-                            public void run() {
-                                info.setText("Connected.");
-                            }
-                        });
-
-                        try {
-                            BufferedReader in = new BufferedReader(new InputStreamReader(client.getInputStream()));
-                            while ((lineIn = in.readLine()) != null) {
-                                Log.d("ServerActivity", lineIn);
-                                handler.post(new Runnable() {
-                                    @Override
-                                    public void run() {
-                                        // DO WHATEVER YOU WANT TO THE FRONT END
-                                        info.setText("message recieved: " + lineIn);
-                                    }
-                                });
-                            }
-                            break;
-                        } catch (Exception e) {
-                            handler.post(new Runnable() {
-                                @Override
-                                public void run() {
-                                    info.setText("Oops. Connection interrupted. Please reconnect your phones.");
-                                }
-                            });
-                            e.printStackTrace();
-                        }
-                    }
-                } else {
-                    handler.post(new Runnable() {
-                        @Override
-                        public void run() {
-                            info.setText("Couldn't detect internet connection.");
-                        }
-                    });
-                }
-            } catch (Exception e) {
-                handler.post(new Runnable() {
-                    @Override
-                    public void run() {
-                        info.setText("Error");
-                    }
-                });
-                e.printStackTrace();
-            }
-        }
-    }
-
 }

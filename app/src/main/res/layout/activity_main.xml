@@ -15,20 +15,20 @@
         android:textSize="18sp"
         />
 
-    <Button
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:id="@+id/send_Location"
-        android:onClick="SendLocation"
-        android:text="Location"
-        android:layout_alignParentLeft="true"
-        android:layout_alignParentBottom="true"
-        />
-
     <com.facebook.login.widget.LoginButton
         android:id="@+id/login_button"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_centerInParent="true" />
+
+    <Button
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:id="@+id/btnSend"
+        android:onClick="sendConveneReq"
+        android:text="Let's Convene!"
+        android:layout_alignParentLeft="true"
+        android:layout_alignParentBottom="true"
+        />
 
 </RelativeLayout>
