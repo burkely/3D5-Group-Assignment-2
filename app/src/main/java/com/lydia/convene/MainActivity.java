@@ -6,6 +6,7 @@ import android.os.Bundle;
 import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
+import android.view.View;
 import android.widget.Button;
 import android.widget.TextView;
 
@@ -18,7 +19,6 @@ import com.facebook.login.widget.LoginButton;
 
 import org.json.JSONException;
 import org.json.JSONObject;
-
 import java.io.UnsupportedEncodingException;
 import java.net.URI;
 import java.net.URLEncoder;
@@ -29,7 +29,7 @@ public class MainActivity extends Activity {
     // LogCat tag - http://developer.android.com/tools/debugging/debugging-log.html
     private static final String TAG = MainActivity.class.getSimpleName();
     // Client name
-    private String name = null;
+    private String name = "lyd";
 
     private TextView info;
     private LoginButton loginButton;
@@ -42,13 +42,13 @@ public class MainActivity extends Activity {
 
     // JSON flags to identify the kind of JSON response
     private static final String TAG_SELF = "self", TAG_CONVENE_REQ = "convene?", TAG_LOCATION_REQ = "location",
-            TAG_LOCATION_RESPONSE = "locationResponse", TAG_CONVENE_RESPONSE = "conveneResponse";
+            TAG_MESSAGE="message", TAG_LOCATION_RESPONSE = "locationResponse", TAG_CONVENE_RESPONSE = "conveneResponse";
 
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        Log.d("test", "test");
+        Log.i(TAG, "test");
         FacebookSdk.sdkInitialize(getApplicationContext());
         // Initialize the SDK before executing any other operations,
         // especially, if you're using Facebook UI elements.
@@ -63,15 +63,20 @@ public class MainActivity extends Activity {
         btnSend = (Button) findViewById(R.id.btnSend);
 
         utils = new Utils(getApplicationContext());
-        Log.d("INIT", "inti");
+
+        btnSend.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                // Sending message to web socket server
+                sendMessageToServer(utils.getSendMessageJSON("convene?"));
+            }
+        });
+
         //create a callback to handle the results of the login attempts and
         // register it with the CallbackManager
         loginButton.registerCallback(callbackManager, new FacebookCallback<LoginResult>() {
             @Override
             public void onSuccess(LoginResult loginResult) {
-                info.setText("User ID:  " +
-                        loginResult.getAccessToken().getUserId() + "\n" +
-                        "Auth Token: " + loginResult.getAccessToken().getToken());
             }
 
             @Override
@@ -88,12 +93,12 @@ public class MainActivity extends Activity {
         /**
          * Creating web socket client. This will have callback methods
          * */
-        Log.d("BEGIN CONN", "creating client websocket connection");
-        try {
-            client = new WebSocketClient(URI.create(WsConfig.URL_WEBSOCKET
-                    + URLEncoder.encode(name, "UTF-8")), new WebSocketClient.Listener() {
+        info.setText("creating client websocket connection");
 
-                @Override
+        client = new WebSocketClient(URI.create(WsConfig.URL_WEBSOCKET
+                    + name), new WebSocketClient.Listener() {
+
+            @Override
             public void onConnect() {
 
             }
@@ -103,14 +108,12 @@ public class MainActivity extends Activity {
              * */
             @Override
             public void onMessage(String message) {
-                Log.d(TAG, String.format("Got string message! %s", message));
-
                 parseMessage(message);
             }
 
             @Override
             public void onMessage(byte[] data) {
-                Log.d(TAG, String.format("Got binary message! %s",
+                Log.i(TAG, String.format("Got binary message! %s",
                         bytesToHex(data)));
 
                 // Message will be in JSON format
@@ -132,15 +135,10 @@ public class MainActivity extends Activity {
             }
 
             }, null);
-            Log.d("BEGIN..", "made a client");
-        }
-
-        catch (UnsupportedEncodingException e) {
-            e.printStackTrace();
-        }
-
+            Log.i("BEGIN..", "made a client");
         client.connect();
-    }
+            info.setText("client connected");
+        }
 
 
     @Override
@@ -176,11 +174,6 @@ public class MainActivity extends Activity {
     }
 
 
-    public void sendConveneReq() {
-        // ask userX to meet. Send to server to pass on
-        // Sending message to web socket server
-        sendMessageToServer(utils.getSendMessageJSON("convene?"));
-    }
 
     @Override
     protected void onDestroy() {
@@ -261,8 +254,21 @@ public class MainActivity extends Activity {
                 String message = jObj.getString("response");
                 //alert that friend responded
                 //or notification if paused, in background
+            }else if (flag.equalsIgnoreCase(TAG_MESSAGE)) {
+                // if the flag is 'message', new message received
+                String fromName = name;
+                String message = jObj.getString("message");
+                String sessionId = jObj.getString("sessionId");
+                boolean isSelf = true;
+
+                // Checking if the message was sent by you
+                if (!sessionId.equals(utils.getSessionId())) {
+                    fromName = jObj.getString("name");
+                    isSelf = false;
+                }
             }
-        } catch (JSONException e) {
+
+            } catch (JSONException e) {
             e.printStackTrace();
         }
     }
