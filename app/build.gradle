@@ -5,7 +5,7 @@ android {
     buildToolsVersion "22.0.1"
     defaultConfig {
         applicationId 'com.lydia.convene'
-        minSdkVersion 15
+        minSdkVersion 16
         targetSdkVersion 22
         versionCode 1
         versionName "1.0"
@@ -24,8 +24,18 @@ repositories {
     mavenCentral()
 }
 
+apply plugin: 'com.google.gms.google-services'
+
 dependencies {
     compile fileTree(dir: 'libs', include: ['*.jar'])
+    //Be sure you update this version number each time Google Play services is updated.
+    //compile 'com.google.android.gms:play-services:8.3.0'
+    //use specific services to save memory etc
+    compile 'com.google.android.gms:play-services-identity:8.3.0'
+    compile 'com.google.android.gms:play-services-gcm:8.3.0'
+    compile 'com.google.android.gms:play-services-location:8.3.0'
+    compile 'com.google.android.gms:play-services-maps:8.3.0'
+    compile 'com.google.android.gms:play-services-nearby:8.3.0'
     compile 'com.android.support:appcompat-v7:22.2.1'
     compile 'com.facebook.android:facebook-android-sdk:4.7.0'
 }

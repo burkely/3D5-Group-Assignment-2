@@ -236,7 +236,7 @@ public class WebSocketClient {
         return Base64.encodeToString(nonce, Base64.DEFAULT).trim();
     }
 
-    void sendFrame(final byte[] frame) {
+    public void sendFrame(final byte[] frame) {
         mHandler.post(new Runnable() {
             @Override
             public void run() {

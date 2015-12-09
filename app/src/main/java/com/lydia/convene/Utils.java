@@ -5,32 +5,45 @@ package com.lydia.convene;
  */
 
 
-        import org.json.JSONException;
-        import org.json.JSONObject;
+import org.json.JSONException;
+import org.json.JSONObject;
 
-        import android.content.Context;
-        import android.content.SharedPreferences;
-        import android.content.SharedPreferences.Editor;
+import android.content.Context;
+import android.content.SharedPreferences;
+import android.content.SharedPreferences.Editor;
+import android.util.Log;
 
 public class Utils {
 
     private Context context;
     private SharedPreferences sharedPref;
 
-    private static final String KEY_SHARED_PREF = "ANDROID_WEB_CHAT";
-    private static final int KEY_MODE_PRIVATE = 0;
-    private static final String KEY_SESSION_ID = "sessionId",
-            FLAG_MESSAGE = "message";
+    private static final String KEY_SESSION_ID = "sessionId", KEY_USER_ID = "fromUserID";
+
+    private static final String TAG_SELF = "self", TAG_CONVENE_REQ = "convene?", TAG_LOCATION_REQ = "location",
+            TAG_MESSAGE = "message", TAG_LOCATION_RESPONSE = "locationResponse", TAG_CONVENE_RESPONSE = "conveneResponse";
+
 
     public Utils(Context context) {
         this.context = context;
-        sharedPref = this.context.getSharedPreferences(KEY_SHARED_PREF,
-                KEY_MODE_PRIVATE);
+        sharedPref = context.getSharedPreferences("com.lydia.convene.storage",
+                Context.MODE_PRIVATE);
+
     }
 
     public void storeSessionId(String sessionId) {
+
         Editor editor = sharedPref.edit();
+        editor.clear();
         editor.putString(KEY_SESSION_ID, sessionId);
+        editor.commit();
+    }
+
+    public void storeMyId(String UserId){
+
+        Editor editor = sharedPref.edit();
+        editor.clear();
+        editor.putString(KEY_USER_ID, UserId);
         editor.commit();
     }
 
@@ -38,12 +51,14 @@ public class Utils {
         return sharedPref.getString(KEY_SESSION_ID, null);
     }
 
-    public String getSendMessageJSON(String message) {
-        String json = null;
+    public String getMyId(){ return sharedPref.getString(KEY_USER_ID, null);}
 
+    public String getSendMessageJSON(String message, String flag) {
+        String json = null;
+        Log.d("In getsendmessage", flag);
         try {
             JSONObject jObj = new JSONObject();
-            jObj.put("flag", FLAG_MESSAGE);
+            jObj.put("flag", flag);
             jObj.put("sessionId", getSessionId());
             jObj.put("message", message);
 
@@ -51,8 +66,8 @@ public class Utils {
         } catch (JSONException e) {
             e.printStackTrace();
         }
-
         return json;
     }
+
 
 }
